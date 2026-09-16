@@ -45,13 +45,48 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const CONFIDENCES = new Set(['high', 'medium', 'low']);
 
-function isValidRecommendation(value: unknown): value is LineupRecommendation {
-  if (!isRecord(value)) return false;
-  if (typeof value.slot !== 'string' || typeof value.starterId !== 'string') return false;
-  if (typeof value.starterName !== 'string' || typeof value.reasoning !== 'string') return false;
-  if (typeof value.confidence !== 'string' || !CONFIDENCES.has(value.confidence.toLowerCase())) return false;
-  if (value.alternatives !== undefined && !Array.isArray(value.alternatives)) return false;
-  return true;
+function asString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/** Pick the first present string among candidate keys (handles snake/camel variants). */
+function pickString(rec: Record<string, unknown>, keys: string[]): string | null {
+  for (const k of keys) {
+    const v = asString(rec[k]);
+    if (v !== null) return v;
+  }
+  return null;
+}
+
+/** Normalize one raw item into a LineupRecommendation, or null if unusable. */
+function normalizeRecommendation(value: unknown): LineupRecommendation | null {
+  if (!isRecord(value)) return null;
+  const slot = pickString(value, ['slot', 'position', 'slotLabel']);
+  const starterId = pickString(value, ['starterId', 'starter_id', 'playerId', 'player_id', 'id']);
+  const starterName = pickString(value, ['starterName', 'starter_name', 'name', 'playerName', 'player_name']);
+  const reasoning = pickString(value, ['reasoning', 'reason', 'note', 'explanation']);
+  if (!slot || !starterId || !starterName || !reasoning) return null;
+  const rawConfidence = pickString(value, ['confidence']);
+  const confidence = rawConfidence !== null && CONFIDENCES.has(rawConfidence.toLowerCase())
+    ? (rawConfidence.toLowerCase() as LineupRecommendation['confidence'])
+    : 'medium';
+  const rawAlts = value.alternatives ?? value.bench_options ?? value.benchOptions;
+  const alternatives = Array.isArray(rawAlts)
+    ? rawAlts
+        .filter(
+          (alt): alt is { playerId: string; playerName: string; note: string } =>
+            isRecord(alt) &&
+            pickString(alt, ['playerId', 'player_id', 'id']) !== null &&
+            pickString(alt, ['playerName', 'player_name', 'name']) !== null &&
+            pickString(alt, ['note', 'reason', 'reasoning']) !== null,
+        )
+        .map((alt) => ({
+          playerId: pickString(alt as Record<string, unknown>, ['playerId', 'player_id', 'id']) as string,
+          playerName: pickString(alt as Record<string, unknown>, ['playerName', 'player_name', 'name']) as string,
+          note: pickString(alt as Record<string, unknown>, ['note', 'reason', 'reasoning']) as string,
+        }))
+    : [];
+  return { slot, starterId, starterName, reasoning, confidence, alternatives };
 }
 
 /** Parse the model's JSON output, tolerating wrappers, fences, and stray text. */
@@ -78,27 +113,16 @@ function parseRecommendations(raw: string): LineupRecommendation[] {
           .map((k) => (parsed as Record<string, unknown>)[k])
           .find((v) => Array.isArray(v))
       : undefined;
-  if (!Array.isArray(arr) || arr.length === 0 || !arr.every(isValidRecommendation)) {
+  if (!Array.isArray(arr)) {
     throw new Error('AI returned an unexpected response format.');
   }
-  return arr.map((rec) => ({
-    slot: rec.slot,
-    starterId: rec.starterId,
-    starterName: rec.starterName,
-    reasoning: rec.reasoning,
-    confidence: rec.confidence.toLowerCase() as LineupRecommendation['confidence'],
-    alternatives: Array.isArray(rec.alternatives)
-      ? rec.alternatives
-          .filter(
-            (alt): alt is { playerId: string; playerName: string; note: string } =>
-              isRecord(alt) &&
-              typeof alt.playerId === 'string' &&
-              typeof alt.playerName === 'string' &&
-              typeof alt.note === 'string',
-          )
-          .map((alt) => ({ playerId: alt.playerId, playerName: alt.playerName, note: alt.note }))
-      : [],
-  }));
+  const recs = arr
+    .map(normalizeRecommendation)
+    .filter((r): r is LineupRecommendation => r !== null);
+  if (recs.length === 0) {
+    throw new Error('AI returned an unexpected response format.');
+  }
+  return recs;
 }
 
 /** Heuristic fallback when no LLM key is configured: keep current starters. */
