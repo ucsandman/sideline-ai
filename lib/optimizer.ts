@@ -49,35 +49,44 @@ function isValidRecommendation(value: unknown): value is LineupRecommendation {
   if (!isRecord(value)) return false;
   if (typeof value.slot !== 'string' || typeof value.starterId !== 'string') return false;
   if (typeof value.starterName !== 'string' || typeof value.reasoning !== 'string') return false;
-  if (typeof value.confidence !== 'string' || !CONFIDENCES.has(value.confidence)) return false;
+  if (typeof value.confidence !== 'string' || !CONFIDENCES.has(value.confidence.toLowerCase())) return false;
   if (value.alternatives !== undefined && !Array.isArray(value.alternatives)) return false;
   return true;
 }
 
-/** Parse the model's JSON-only output, tolerating fences and stray text. */
+/** Parse the model's JSON output, tolerating wrappers, fences, and stray text. */
 function parseRecommendations(raw: string): LineupRecommendation[] {
   let text = raw.trim();
   if (text.startsWith('```')) {
     text = text.replace(/^```[a-zA-Z]*\s*/, '').replace(/\s*```$/, '').trim();
   }
-  if (!text.startsWith('[')) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
     const start = text.indexOf('[');
     const end = text.lastIndexOf(']');
     if (start === -1 || end === -1 || end <= start) {
       throw new Error('AI returned an unexpected response format.');
     }
-    text = text.slice(start, end + 1);
+    parsed = JSON.parse(text.slice(start, end + 1));
   }
-  const parsed: unknown = JSON.parse(text);
-  if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidRecommendation)) {
+  const arr: unknown = Array.isArray(parsed)
+    ? parsed
+    : isRecord(parsed)
+      ? ['recommendations', 'lineup', 'picks', 'slots']
+          .map((k) => (parsed as Record<string, unknown>)[k])
+          .find((v) => Array.isArray(v))
+      : undefined;
+  if (!Array.isArray(arr) || arr.length === 0 || !arr.every(isValidRecommendation)) {
     throw new Error('AI returned an unexpected response format.');
   }
-  return parsed.map((rec) => ({
+  return arr.map((rec) => ({
     slot: rec.slot,
     starterId: rec.starterId,
     starterName: rec.starterName,
     reasoning: rec.reasoning,
-    confidence: rec.confidence,
+    confidence: rec.confidence.toLowerCase() as LineupRecommendation['confidence'],
     alternatives: Array.isArray(rec.alternatives)
       ? rec.alternatives
           .filter(
@@ -128,6 +137,6 @@ export async function recommendLineup(input: OptimizeInput): Promise<LineupRecom
     },
   ];
 
-  const response = await getLlmProvider().chat(messages);
+  const response = await getLlmProvider().chat(messages, { json: true });
   return parseRecommendations(response);
 }

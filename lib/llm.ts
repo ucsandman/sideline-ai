@@ -7,7 +7,7 @@ export interface LlmMessage {
 }
 
 export interface LlmProvider {
-  chat(messages: LlmMessage[]): Promise<string>;
+  chat(messages: LlmMessage[], opts?: { json?: boolean }): Promise<string>;
 }
 
 export class LlmNotConfiguredError extends Error {
@@ -32,7 +32,7 @@ export function getLlmProvider(): LlmProvider {
     throw new LlmNotConfiguredError();
   }
   return {
-    async chat(messages: LlmMessage[]): Promise<string> {
+    async chat(messages: LlmMessage[], opts?: { json?: boolean }): Promise<string> {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -42,6 +42,7 @@ export function getLlmProvider(): LlmProvider {
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           temperature: 0.3,
+          ...(opts?.json ? { response_format: { type: 'json_object' } } : {}),
           messages,
         }),
       });
@@ -59,13 +60,13 @@ export function buildLineupSystemPrompt(): string {
   return [
     'You are a fantasy football analyst for the Sideline AI app.',
     'Recommend a starting lineup for the given week: concise start/sit picks, each with a 1-2 sentence reason.',
-    'Respond with ONLY valid JSON: an array with one object per roster slot.',
+    'Respond with ONLY valid JSON: an object shaped like {"recommendations": [...]}, with one object per roster slot inside the array.',
     'Each object must have: slot (roster slot label, e.g. "QB", "RB1", "FLEX"),',
     'starterId (the Sleeper player id you recommend to start), starterName (player display name),',
     'reasoning (1-2 sentences explaining the pick),',
     'confidence (one of: "high", "medium", "low"),',
     'and alternatives: an array of up to 2 bench options, each with playerId, playerName, and a short note.',
-    'Do not include any text outside the JSON array. Never use em dashes in any text field; use commas or colons instead.',
+    'Do not include any text outside the JSON object. Never use em dashes in any text field; use commas or colons instead.',
   ].join(' ');
 }
 
