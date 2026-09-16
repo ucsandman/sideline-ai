@@ -102,7 +102,7 @@ function parseRecommendations(raw: string): LineupRecommendation[] {
     const start = text.indexOf('[');
     const end = text.lastIndexOf(']');
     if (start === -1 || end === -1 || end <= start) {
-      throw new Error('AI returned an unexpected response format.');
+      throw new Error(`AI returned an unexpected response format. Raw: ${raw.slice(0, 400)}`);
     }
     parsed = JSON.parse(text.slice(start, end + 1));
   }
@@ -114,13 +114,13 @@ function parseRecommendations(raw: string): LineupRecommendation[] {
           .find((v) => Array.isArray(v))
       : undefined;
   if (!Array.isArray(arr)) {
-    throw new Error('AI returned an unexpected response format.');
+    throw new Error(`AI returned an unexpected response format. Raw: ${raw.slice(0, 400)}`);
   }
   const recs = arr
     .map(normalizeRecommendation)
     .filter((r): r is LineupRecommendation => r !== null);
   if (recs.length === 0) {
-    throw new Error('AI returned an unexpected response format.');
+    throw new Error(`AI returned an unexpected response format. Raw: ${raw.slice(0, 400)}`);
   }
   return recs;
 }
