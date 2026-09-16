@@ -151,7 +151,12 @@ export async function recommendLineup(input: OptimizeInput): Promise<LineupRecom
   const bench = (input.roster.players ?? []).filter((id) => !starters.includes(id));
 
   const messages = [
-    { role: 'system' as const, content: buildLineupSystemPrompt() },
+    {
+      role: 'system' as const,
+      content:
+        buildLineupSystemPrompt() +
+        ` Use web search to verify each player's current team, injury status, and week ${input.week} matchup before deciding. Base your reasoning on what you find, not on your training data.`,
+    },
     {
       role: 'user' as const,
       content: buildLineupUserPrompt({
@@ -164,6 +169,6 @@ export async function recommendLineup(input: OptimizeInput): Promise<LineupRecom
     },
   ];
 
-  const response = await getLlmProvider().chat(messages, { json: true });
+  const response = await getLlmProvider().chat(messages, { json: true, webSearch: true });
   return parseRecommendations(response);
 }

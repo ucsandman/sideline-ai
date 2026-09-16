@@ -7,7 +7,7 @@ export interface LlmMessage {
 }
 
 export interface LlmProvider {
-  chat(messages: LlmMessage[], opts?: { json?: boolean }): Promise<string>;
+  chat(messages: LlmMessage[], opts?: { json?: boolean; webSearch?: boolean }): Promise<string>;
 }
 
 export class LlmNotConfiguredError extends Error {
@@ -25,6 +25,46 @@ interface OpenAiChatResponse {
   choices?: { message?: { content?: string } }[];
 }
 
+interface ResponsesOutputItem {
+  type?: string;
+  content?: { type?: string; text?: string }[];
+}
+
+/**
+ * Chat via the Responses API with the hosted web_search tool, forcing JSON
+ * output. Lets the model verify current teams, injuries, and matchups
+ * instead of relying on its training cutoff.
+ */
+async function chatWithWebSearch(key: string, messages: LlmMessage[]): Promise<string> {
+  const res = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      temperature: 0.3,
+      tools: [{ type: 'web_search' }],
+      text: { format: { type: 'json_object' } },
+      input: messages.map((m) => ({ role: m.role, content: m.content })),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error('AI request failed. Please try again.');
+  }
+  const data = (await res.json()) as { output?: ResponsesOutputItem[] };
+  for (const item of data.output ?? []) {
+    if (item.type === 'message') {
+      const textPart = (item.content ?? []).find((c) => c.type === 'output_text' && c.text);
+      if (textPart?.text) {
+        return textPart.text;
+      }
+    }
+  }
+  throw new Error('AI returned no usable response.');
+}
+
 /** Returns the default OpenAI provider; throws LlmNotConfiguredError when no key. */
 export function getLlmProvider(): LlmProvider {
   const key = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
@@ -32,7 +72,10 @@ export function getLlmProvider(): LlmProvider {
     throw new LlmNotConfiguredError();
   }
   return {
-    async chat(messages: LlmMessage[], opts?: { json?: boolean }): Promise<string> {
+    async chat(messages: LlmMessage[], opts?: { json?: boolean; webSearch?: boolean }): Promise<string> {
+      if (opts?.webSearch) {
+        return chatWithWebSearch(key, messages);
+      }
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
