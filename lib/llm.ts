@@ -46,7 +46,9 @@ async function chatWithWebSearch(key: string, messages: LlmMessage[]): Promise<s
       model: 'gpt-4o-mini',
       temperature: 0.3,
       tools: [{ type: 'web_search' }],
-      text: { format: { type: 'json_object' } },
+      // NOTE: the Responses API rejects web_search combined with a JSON
+      // text format ("Web Search cannot be used with JSON mode"), so the
+      // model returns plain text and parseRecommendations extracts the JSON.
       input: messages.map((m) => ({ role: m.role, content: m.content })),
     }),
   });
