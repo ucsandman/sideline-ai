@@ -104,10 +104,18 @@ function parseRecommendations(raw: string): LineupRecommendation[] {
   } catch {
     const start = text.indexOf('[');
     const end = text.lastIndexOf(']');
-    if (start === -1 || end === -1 || end <= start) {
+    let extracted: unknown = null;
+    if (start !== -1 && end !== -1 && end > start) {
+      try {
+        extracted = JSON.parse(text.slice(start, end + 1));
+      } catch {
+        extracted = null;
+      }
+    }
+    if (extracted === null) {
       throw new Error(`AI returned an unexpected response format. Raw: ${raw.slice(0, 400)}`);
     }
-    parsed = JSON.parse(text.slice(start, end + 1));
+    parsed = extracted;
   }
   const arr: unknown = Array.isArray(parsed)
     ? parsed

@@ -45,6 +45,7 @@ async function chatWithWebSearch(key: string, messages: LlmMessage[]): Promise<s
     body: JSON.stringify({
       model: 'gpt-4o-mini',
       temperature: 0.3,
+      max_output_tokens: 4000,
       tools: [{ type: 'web_search' }],
       // NOTE: the Responses API rejects web_search combined with a JSON
       // text format ("Web Search cannot be used with JSON mode"), so the
@@ -57,15 +58,21 @@ async function chatWithWebSearch(key: string, messages: LlmMessage[]): Promise<s
     throw new Error(`AI request failed (HTTP ${res.status}): ${body.slice(0, 300)}`);
   }
   const data = (await res.json()) as { output?: ResponsesOutputItem[] };
+  // With web_search the model can emit several messages (intermediate notes,
+  // then the final answer): the LAST message holds the recommendations.
+  let text: string | null = null;
   for (const item of data.output ?? []) {
     if (item.type === 'message') {
       const textPart = (item.content ?? []).find((c) => c.type === 'output_text' && c.text);
       if (textPart?.text) {
-        return textPart.text;
+        text = textPart.text;
       }
     }
   }
-  throw new Error('AI returned no usable response.');
+  if (!text) {
+    throw new Error('AI returned no usable response.');
+  }
+  return text;
 }
 
 /** Returns the default OpenAI provider; throws LlmNotConfiguredError when no key. */
