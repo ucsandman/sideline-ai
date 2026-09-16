@@ -54,9 +54,12 @@ function isValidRecommendation(value: unknown): value is LineupRecommendation {
   return true;
 }
 
-/** Parse the model's JSON-only output, tolerating stray text around the array. */
+/** Parse the model's JSON-only output, tolerating fences and stray text. */
 function parseRecommendations(raw: string): LineupRecommendation[] {
   let text = raw.trim();
+  if (text.startsWith('```')) {
+    text = text.replace(/^```[a-zA-Z]*\s*/, '').replace(/\s*```$/, '').trim();
+  }
   if (!text.startsWith('[')) {
     const start = text.indexOf('[');
     const end = text.lastIndexOf(']');

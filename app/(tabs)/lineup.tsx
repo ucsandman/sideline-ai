@@ -63,8 +63,15 @@ export default function Lineup() {
       });
       setRecs(result);
       setHasRun(true);
-    } catch {
-      setError('Could not optimize your lineup. Try again.');
+      setRecs(result);
+      setHasRun(true);
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : 'Unknown error';
+      setError(
+        __DEV__
+          ? `Could not optimize: ${detail}`
+          : 'Could not optimize your lineup. Try again.',
+      );
     } finally {
       setOptimizing(false);
     }
