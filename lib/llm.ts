@@ -51,7 +51,8 @@ async function chatWithWebSearch(key: string, messages: LlmMessage[]): Promise<s
     }),
   });
   if (!res.ok) {
-    throw new Error('AI request failed. Please try again.');
+    const body = await res.text().catch(() => '');
+    throw new Error(`AI request failed (HTTP ${res.status}): ${body.slice(0, 300)}`);
   }
   const data = (await res.json()) as { output?: ResponsesOutputItem[] };
   for (const item of data.output ?? []) {
