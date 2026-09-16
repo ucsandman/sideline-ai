@@ -46,7 +46,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const CONFIDENCES = new Set(['high', 'medium', 'low']);
 
 function asString(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
+  if (typeof value === 'string' && value.length > 0) return value;
+  // The model often emits numeric Sleeper ids (e.g. "starterId": 6804).
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return null;
 }
 
 /** Pick the first present string among candidate keys (handles snake/camel variants). */
