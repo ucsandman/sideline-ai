@@ -67,6 +67,8 @@ export function buildLineupSystemPrompt(): string {
     'confidence (one of: "high", "medium", "low"),',
     'and alternatives: an array of up to 2 bench options, each with playerId, playerName, and a short note.',
     'Do not include any text outside the JSON object. Never use em dashes in any text field; use commas or colons instead.',
+    'The team shown next to each player is their CURRENT team: trust it over your training data, because players change teams every offseason.',
+    'Never describe a player as playing for a different team, catching passes from a different quarterback, or facing a specific opponent unless that fact appears in the prompt.',
   ].join(' ');
 }
 
